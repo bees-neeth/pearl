@@ -783,12 +783,6 @@ func (w *Wallet) recovery(chainClient chain.Interface, birthdayBlock *waddrmgr.B
 	w.recovering.Store(syncer)
 	defer close(syncer.done)
 
-	// We'll initialize the recovery manager with a default batch size of
-	// 2000.
-	recoveryMgr := NewRecoveryManager(
-		w.recoveryWindow, recoveryBatchSize, w.chainParams,
-	)
-
 	// Recover each existing HD account independently. Address indexes are
 	// keyed by scope in FilterBlocksRequest, so merging accounts into one
 	// recovery state would collide at the same child indexes.
