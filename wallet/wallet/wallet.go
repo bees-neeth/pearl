@@ -787,9 +787,9 @@ func (w *Wallet) recovery(chainClient chain.Interface, birthdayBlock *waddrmgr.B
 	// keyed by scope in FilterBlocksRequest, so merging accounts into one
 	// recovery state would collide at the same child indexes.
 	type accountRecovery struct {
-		manager *RecoveryManager
+		manager    *RecoveryManager
 		scopedMgrs map[waddrmgr.KeyScope]*waddrmgr.ScopedKeyManager
-		account uint32
+		account    uint32
 	}
 	var recoveries []accountRecovery
 	err := walletdb.Update(w.db, func(tx walletdb.ReadWriteTx) error {
@@ -805,6 +805,9 @@ func (w *Wallet) recovery(chainClient chain.Interface, birthdayBlock *waddrmgr.B
 				if account == waddrmgr.ImportedAddrAccount {
 					return nil
 				}
+				// Each account watches all previously known UTXOs so that
+				// spends remain visible across account-specific filter passes.
+				// This preserves the original wallet-wide outpoint watch.
 				mgr := NewRecoveryManager(w.recoveryWindow, recoveryBatchSize, w.chainParams)
 				single := map[waddrmgr.KeyScope]*waddrmgr.ScopedKeyManager{scope: scopedMgr}
 				if err := mgr.Resurrect(addrMgrNS, single, credits, account); err != nil {
