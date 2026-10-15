@@ -37,8 +37,8 @@ func TestRecoveryKeyPathsPreserveAccount(t *testing.T) {
 func TestAccountRecoveryHorizonsAreIndependent(t *testing.T) {
 	const window = uint32(10)
 	scope := waddrmgr.KeyScopeBIP0086
-	account0 := NewRecoveryManager(window, 10, chainParams).State().StateForScope(scope)
-	account1 := NewRecoveryManager(window, 10, chainParams).State().StateForScope(scope)
+	account0 := NewRecoveryManager(window, 10, &chainParams).State().StateForScope(scope)
+	account1 := NewRecoveryManager(window, 10, &chainParams).State().StateForScope(scope)
 
 	_, delta0 := account0.ExternalBranch.ExtendHorizon()
 	_, delta1 := account1.ExternalBranch.ExtendHorizon()
