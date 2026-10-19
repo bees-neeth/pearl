@@ -13,7 +13,6 @@ import (
 	"github.com/pearl-research-labs/pearl/wallet/chain"
 	"github.com/pearl-research-labs/pearl/wallet/waddrmgr"
 	"github.com/pearl-research-labs/pearl/wallet/walletdb"
-	"github.com/pearl-research-labs/pearl/wallet/wtxmgr"
 )
 
 type recoveryFunding struct {
