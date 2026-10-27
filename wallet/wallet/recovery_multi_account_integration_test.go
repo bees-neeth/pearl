@@ -105,11 +105,11 @@ func TestRecoveryFindsFundedAddressesInTwoAccounts(t *testing.T) {
 	if account1 != 1 {
 		t.Fatalf("created account %d, want account 1", account1)
 	}
-	addr0, err := w.NewAddress(0, waddrmgr.KeyScopeBIP0086, false)
+	addr0, err := w.NewAddress(0, waddrmgr.KeyScopeBIP0086)
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr1, err := w.NewAddress(account1, waddrmgr.KeyScopeBIP0086, false)
+	addr1, err := w.NewAddress(account1, waddrmgr.KeyScopeBIP0086)
 	if err != nil {
 		t.Fatal(err)
 	}
