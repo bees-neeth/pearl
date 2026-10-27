@@ -3,7 +3,7 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package legacyrpc
+package jsonrpc
 
 import (
 	"bytes"
@@ -511,14 +511,6 @@ func decodeAddress(s string, params *chaincfg.Params) (btcutil.Address, error) {
 			Message: msg,
 		}
 	}
-	if !addr.IsForNet(params) {
-		msg := fmt.Sprintf("Invalid address %q: not intended for use on %s",
-			addr, params.Name)
-		return nil, &btcjson.RPCError{
-			Code:    btcjson.ErrRPCInvalidAddressOrKey,
-			Message: msg,
-		}
-	}
 	return addr, nil
 }
 
@@ -691,12 +683,11 @@ func getNewAddress(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 	if cmd.AddressType != nil && *cmd.AddressType != "bech32" {
 		return nil, &ErrAddressTypeUnknown
 	}
-	usePQ := cmd.PQ != nil && *cmd.PQ
 	account, err := w.AccountNumber(keyScope, acctName)
 	if err != nil {
 		return nil, err
 	}
-	addr, err := w.NewAddress(account, keyScope, usePQ)
+	addr, err := w.NewAddress(account, keyScope)
 	if err != nil {
 		return nil, err
 	}
@@ -722,12 +713,11 @@ func getRawChangeAddress(icmd interface{}, w *wallet.Wallet) (interface{}, error
 	if cmd.AddressType != nil && *cmd.AddressType != "bech32" {
 		return nil, &ErrAddressTypeUnknown
 	}
-	usePQ := cmd.PQ != nil && *cmd.PQ
 	account, err := w.AccountNumber(keyScope, acctName)
 	if err != nil {
 		return nil, err
 	}
-	addr, err := w.NewChangeAddress(account, keyScope, usePQ)
+	addr, err := w.NewChangeAddress(account, keyScope)
 	if err != nil {
 		return nil, err
 	}
@@ -926,7 +916,7 @@ func getTransaction(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 // separated by newlines.  It is set during init.  These usages are used for all
 // locales.
 //
-//go:generate go run ../../internal/rpchelp/genrpcserverhelp.go legacyrpc
+//go:generate go run ../../internal/rpchelp/genrpcserverhelp.go jsonrpc
 //go:generate gofmt -w rpcserverhelp.go
 
 var helpDescs map[string]string
@@ -1347,9 +1337,9 @@ func lockUnspent(icmd interface{}, w *wallet.Wallet) (interface{}, error) {
 func makeOutputs(pairs map[string]btcutil.Amount, chainParams *chaincfg.Params) ([]*wire.TxOut, error) {
 	outputs := make([]*wire.TxOut, 0, len(pairs))
 	for addrStr, amt := range pairs {
-		addr, err := btcutil.DecodeAddress(addrStr, chainParams)
+		addr, err := decodeAddress(addrStr, chainParams)
 		if err != nil {
-			return nil, fmt.Errorf("cannot decode address: %w", err)
+			return nil, err
 		}
 
 		pkScript, err := txscript.PayToAddrScript(addr)

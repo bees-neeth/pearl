@@ -792,13 +792,13 @@ func (w *Wallet) recovery(chainClient chain.Interface, birthdayBlock *waddrmgr.B
 		account    uint32
 	}
 	var recoveries []accountRecovery
-	err := walletdb.Update(w.db, func(tx walletdb.ReadWriteTx) error {
+	err := walletdb.Update(w.db, func(tx walletdb.ReadTx) error {
 		txMgrNS := tx.ReadBucket(wtxmgrNamespaceKey)
 		credits, err := w.TxStore.UnspentOutputs(txMgrNS)
 		if err != nil {
 			return err
 		}
-		addrMgrNS := tx.ReadWriteBucket(waddrmgrNamespaceKey)
+		addrMgrNS := tx.ReadBucket(waddrmgrNamespaceKey)
 		for _, scopedMgr := range w.Manager.ActiveScopedKeyManagers() {
 			scope := scopedMgr.Scope()
 			err := scopedMgr.ForEachAccount(addrMgrNS, func(account uint32) error {
@@ -1026,7 +1026,7 @@ expandHorizons:
 // persistent state of the wallet. If any invalid child keys are detected, the
 // horizon will be properly extended such that our lookahead always includes the
 // proper number of valid child keys.
-func expandScopeHorizons(ns walletdb.ReadWriteBucket,
+func expandScopeHorizons(ns walletdb.ReadBucket,
 	scopedMgr *waddrmgr.ScopedKeyManager,
 	scopeState *ScopeRecoveryState, account uint32) error {
 
@@ -1037,7 +1037,7 @@ func expandScopeHorizons(ns walletdb.ReadWriteBucket,
 	count, childIndex := uint32(0), exHorizon
 	for count < exWindow {
 		keyPath := externalKeyPath(account, childIndex)
-		addr, err := scopedMgr.DeriveFromKeyPath(ns, keyPath, false)
+		addr, err := scopedMgr.DeriveFromKeyPath(ns, keyPath)
 		switch {
 		case err == hdkeychain.ErrInvalidChild:
 			// Record the existence of an invalid child with the
@@ -1067,7 +1067,7 @@ func expandScopeHorizons(ns walletdb.ReadWriteBucket,
 	count, childIndex = 0, inHorizon
 	for count < inWindow {
 		keyPath := internalKeyPath(account, childIndex)
-		addr, err := scopedMgr.DeriveFromKeyPath(ns, keyPath, false)
+		addr, err := scopedMgr.DeriveFromKeyPath(ns, keyPath)
 		switch {
 		case err == hdkeychain.ErrInvalidChild:
 			// Record the existence of an invalid child with the
@@ -1182,7 +1182,7 @@ func extendFoundAddresses(ns walletdb.ReadWriteBucket,
 		}
 
 		err := scopedMgr.ExtendExternalAddresses(
-			ns, account, exLastFound, false,
+			ns, account, exLastFound,
 		)
 		if err != nil {
 			return err
@@ -1224,7 +1224,7 @@ func extendFoundAddresses(ns walletdb.ReadWriteBucket,
 			inLastFound--
 		}
 		err := scopedMgr.ExtendInternalAddresses(
-			ns, account, inLastFound, false,
+			ns, account, inLastFound,
 		)
 		if err != nil {
 			return err
@@ -1843,7 +1843,7 @@ func (w *Wallet) CurrentAddress(account uint32, scope waddrmgr.KeyScope) (btcuti
 			// address.
 			if waddrmgr.IsError(err, waddrmgr.ErrAddressNotFound) {
 				addr, props, err = w.newAddress(
-					addrmgrNs, account, scope, false,
+					addrmgrNs, account, scope,
 				)
 			}
 			return err
@@ -1853,7 +1853,7 @@ func (w *Wallet) CurrentAddress(account uint32, scope waddrmgr.KeyScope) (btcuti
 		// used.
 		if maddr.Used(addrmgrNs) {
 			addr, props, err = w.newAddress(
-				addrmgrNs, account, scope, false,
+				addrmgrNs, account, scope,
 			)
 			return err
 		}
@@ -2217,7 +2217,7 @@ func IsChange(details *wtxmgr.TxDetails, cred wtxmgr.CreditRecord) bool {
 // to its own address lists both. Change lists nothing, and neither does spending a received output: the spend is
 // listed once, on the transaction that makes it.
 //
-// TODO: This should be moved to the legacyrpc package.
+// TODO: This should be moved to the jsonrpc package.
 func transactionEntries(tx walletdb.ReadTx, details *wtxmgr.TxDetails, addrMgr *waddrmgr.Manager, syncHeight int32,
 	net *chaincfg.Params) []btcjson.ListTransactionsResult {
 
@@ -3196,7 +3196,7 @@ func (w *Wallet) SortedActivePaymentAddresses() ([]string, error) {
 }
 
 // NewAddress returns the next external chained address for a wallet.
-func (w *Wallet) NewAddress(account uint32, scope waddrmgr.KeyScope, includePQTapscript bool) (btcutil.Address, error) {
+func (w *Wallet) NewAddress(account uint32, scope waddrmgr.KeyScope) (btcutil.Address, error) {
 	chainClient, err := w.requireChainClient()
 	if err != nil {
 		return nil, err
@@ -3218,7 +3218,7 @@ func (w *Wallet) NewAddress(account uint32, scope waddrmgr.KeyScope, includePQTa
 	err = walletdb.Update(w.db, func(tx walletdb.ReadWriteTx) error {
 		addrmgrNs := tx.ReadWriteBucket(waddrmgrNamespaceKey)
 		var err error
-		addr, props, err = w.newAddress(addrmgrNs, account, scope, includePQTapscript)
+		addr, props, err = w.newAddress(addrmgrNs, account, scope)
 		return err
 	})
 	if err != nil {
@@ -3237,14 +3237,14 @@ func (w *Wallet) NewAddress(account uint32, scope waddrmgr.KeyScope, includePQTa
 }
 
 func (w *Wallet) newAddress(addrmgrNs walletdb.ReadWriteBucket, account uint32,
-	scope waddrmgr.KeyScope, includePQTapscript bool) (btcutil.Address, *waddrmgr.AccountProperties, error) {
+	scope waddrmgr.KeyScope) (btcutil.Address, *waddrmgr.AccountProperties, error) {
 
 	manager, err := w.Manager.FetchScopedKeyManager(scope)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	addrs, err := manager.NextExternalAddresses(addrmgrNs, account, 1, includePQTapscript)
+	addrs, err := manager.NextExternalAddresses(addrmgrNs, account, 1)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3260,7 +3260,7 @@ func (w *Wallet) newAddress(addrmgrNs walletdb.ReadWriteBucket, account uint32,
 
 // NewChangeAddress returns a new change address for a wallet.
 func (w *Wallet) NewChangeAddress(account uint32,
-	scope waddrmgr.KeyScope, includePQTapscript bool) (btcutil.Address, error) {
+	scope waddrmgr.KeyScope) (btcutil.Address, error) {
 
 	chainClient, err := w.requireChainClient()
 	if err != nil {
@@ -3280,7 +3280,7 @@ func (w *Wallet) NewChangeAddress(account uint32,
 	err = walletdb.Update(w.db, func(tx walletdb.ReadWriteTx) error {
 		addrmgrNs := tx.ReadWriteBucket(waddrmgrNamespaceKey)
 		var err error
-		addr, err = w.newChangeAddress(addrmgrNs, account, scope, includePQTapscript)
+		addr, err = w.newChangeAddress(addrmgrNs, account, scope)
 		return err
 	})
 	if err != nil {
@@ -3302,14 +3302,14 @@ func (w *Wallet) NewChangeAddress(account uint32,
 // method in order to detect when an on-chain transaction pays to the address
 // being created.
 func (w *Wallet) newChangeAddress(addrmgrNs walletdb.ReadWriteBucket,
-	account uint32, scope waddrmgr.KeyScope, includePQTapscript bool) (btcutil.Address, error) {
+	account uint32, scope waddrmgr.KeyScope) (btcutil.Address, error) {
 
 	manager, err := w.Manager.FetchScopedKeyManager(scope)
 	if err != nil {
 		return nil, err
 	}
 
-	addrs, err := manager.NextInternalAddresses(addrmgrNs, account, 1, includePQTapscript)
+	addrs, err := manager.NextInternalAddresses(addrmgrNs, account, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -3931,7 +3931,6 @@ func (w *Wallet) InitAccounts(scope *waddrmgr.ScopedKeyManager, watchOnly bool, 
 }
 
 // DeriveFromKeyPath derives a private key using the given derivation path.
-// Uses PQ signatures by default.
 func (w *Wallet) DeriveFromKeyPath(scope waddrmgr.KeyScope, path waddrmgr.DerivationPath) (*btcec.PrivateKey, error) {
 	scopedMgr, err := w.Manager.FetchScopedKeyManager(scope)
 	if err != nil {
@@ -3945,12 +3944,10 @@ func (w *Wallet) DeriveFromKeyPath(scope waddrmgr.KeyScope, path waddrmgr.Deriva
 	}
 
 	// The key wasn't in the cache, let's fully derive it now.
-	// We use Update instead of View because DeriveFromKeyPath may need to
-	// auto-create PQ accounts when includePQTapscript=true.
-	err = walletdb.Update(w.db, func(tx walletdb.ReadWriteTx) error {
-		addrmgrNs := tx.ReadWriteBucket(waddrmgrNamespaceKey)
+	err = walletdb.View(w.db, func(tx walletdb.ReadTx) error {
+		addrmgrNs := tx.ReadBucket(waddrmgrNamespaceKey)
 
-		addr, err := scopedMgr.DeriveFromKeyPath(addrmgrNs, path, true)
+		addr, err := scopedMgr.DeriveFromKeyPath(addrmgrNs, path)
 		if err != nil {
 			return fmt.Errorf("error deriving private key: %w", err)
 		}
@@ -3990,7 +3987,7 @@ func (w *Wallet) DeriveFromKeyPathAddAccount(scope waddrmgr.KeyScope,
 	}
 
 	derivePrivKey := func(addrmgrNs walletdb.ReadWriteBucket) error {
-		addr, err := scopedMgr.DeriveFromKeyPath(addrmgrNs, path, true)
+		addr, err := scopedMgr.DeriveFromKeyPath(addrmgrNs, path)
 
 		// Exit early if there's no error.
 		if err == nil {
